@@ -12,7 +12,10 @@ Projekat iz predmeta Inteligentna obrada podataka
 
 Primer:
 
-Napravim nekakav kontekst c koji je vezan za GPU, npr. `auto c = iop::context("GPU");`
-Napravim matricu i vektor (promenljive): `auto A = c.matrix(100, 100); auto b = c.vector(100)`;
-Napravim promenljivu koju vezujem za recimo sinus matricnog proizvoda: `auto v = iop::sin(A.dot(b));`
-Evaluiram jednom: `iop::run({{b, podaci}}, {v});`. Mozda da parametri budu lista parova (promenljiva, poc. vrednost) i izlazna promenljiva a da ovo cudo vrati izracunatu vrednost izlazne promenljive.
+- Napravim nekakav kontekst c koji je vezan za GPU, npr. `auto c = iop::context("GPU");`
+- Napravim matricu i vektor (promenljive): `auto A = c.matrix(100, 100); auto b = c.vector(100)`;
+- Napravim promenljivu koju vezujem za recimo sinus matricnog proizvoda: `auto v = iop::sin(A.dot(b));`
+- Evaluiram jednom: `iop::run({{b, podaci}}, {v});`. Mozda da parametri budu lista parova (promenljiva, poc. vrednost) i izlazna promenljiva a da ovo cudo vrati izracunatu vrednost izlazne promenljive.
+- Vidim da radi, napravim lanac od 100 iteracija, mozda ovako nekako: `auto ch = iop::chain({A, v}, {A, b});`
+- Sad evaluiram lanac. Da bi njega evaluirao moram da mu dam odgovarajucu tuplu ulaza, sa onoliko elemenata i onog tipa kao njegov ulaz/izlaz.
+- Formalizovati tip lanca i kako bi trebalo da se radi sa njim. Jako je bitno da ovo bude elegantno.
