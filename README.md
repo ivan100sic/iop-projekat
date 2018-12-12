@@ -19,3 +19,7 @@ Primer:
 - Vidim da radi, napravim lanac od 100 iteracija, mozda ovako nekako: `auto ch = iop::chain({A, v}, {A, b});`
 - Sad evaluiram lanac. Da bi njega evaluirao moram da mu dam odgovarajucu tuplu ulaza, sa onoliko elemenata i onog tipa kao njegov ulaz/izlaz.
 - Formalizovati tip lanca i kako bi trebalo da se radi sa njim. Jako je bitno da ovo bude elegantno.
+
+## Linkovi
+
+- OpenCL specifikacija: https://www.khronos.org/registry/OpenCL/specs/opencl-1.1.pdf
