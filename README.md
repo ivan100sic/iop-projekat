@@ -24,3 +24,9 @@ Primer:
 
 - OpenCL specifikacija: https://www.khronos.org/registry/OpenCL/specs/opencl-1.1.pdf
 - AMD OpenCL guide: http://developer.amd.com/wordpress/media/2013/12/AMD_OpenCL_Programming_User_Guide2.pdf
+
+## Note to self
+
+- Ne moze ovako, ovo je totalno pogresno. Ne postoji apsolutno nikakva
+	garancija o konzistentnosti takozvane globalne memorije tokom izvrsenja.
+	Nadji pametniji nacin. Sa druge strane dostigli smo **500 GFLOPS**! Trik je u `LOCAL_SIZE = 32`
