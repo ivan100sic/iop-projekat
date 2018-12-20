@@ -24,6 +24,7 @@ Primer:
 
 - OpenCL specifikacija: https://www.khronos.org/registry/OpenCL/specs/opencl-1.1.pdf
 - AMD OpenCL guide: http://developer.amd.com/wordpress/media/2013/12/AMD_OpenCL_Programming_User_Guide2.pdf
+- GCN Arhitektura: http://developer.amd.com/wordpress/media/2013/12/AMD_GCN3_Instruction_Set_Architecture_rev1.1.pdf
 
 ## Note to self
 
