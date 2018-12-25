@@ -8,18 +8,31 @@
 namespace iopp {
 
 class _opencl_context;
+class cl_vec;
+class cl_val;
+class cl_mat;
 
 class cl_mat {
-	friend _opencl_context;
+	friend class _opencl_context;
+	friend class cl_vec;
+	friend class cl_val;
 protected:
 	_opencl_context* context;
 	cl_mem mem;
 	int n, m;
 	cl_mat(_opencl_context* context, cl_mem mem, int n, int m);
+public:
+	cl_mat T() const;
+	cl_vec dot(const cl_vec& v) const;
+	void set(const la::mat& a);
+	la::mat get() const;
+	cl_mat& operator= (const cl_mat& b);
 };
 
 class cl_vec {
-	friend _opencl_context;
+	friend class _opencl_context;
+	friend class cl_val;
+	friend class cl_mat;
 protected:
 	_opencl_context* context;
 	cl_mem mem;
@@ -29,12 +42,26 @@ public:
 	void set(const la::vec& v);
 	la::vec get() const;
 	cl_vec operator- (const cl_vec& b) const;
+	cl_vec& operator= (const cl_vec& b);
+	cl_vec& operator-= (const cl_vec& b);
+	cl_vec operator* (const cl_val& y) const;
 	~cl_vec();
+};
+
+class cl_val {
+	friend class _opencl_context;
+	friend class cl_vec;
+	friend class cl_mat;
+protected:
+	_opencl_context* context;
+	float val;
+	cl_val(_opencl_context* context, float val);
 };
 
 class _opencl_context {
 	friend class cl_mat;
 	friend class cl_vec;
+	friend class cl_val;
 	friend _opencl_context opencl_context();
 protected:
 	cl_platform_id platform;
@@ -68,6 +95,7 @@ protected:
 public:
 	cl_mat mat(int n, int m);
 	cl_vec vec(int n);
+	cl_val val(float f);
 };
 
 _opencl_context opencl_context();

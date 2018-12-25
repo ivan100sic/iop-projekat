@@ -6,6 +6,11 @@ namespace iopp {
 const int LOCAL_SIZE = 16;
 const int LOCAL_SIZE_SQRT = 4;
 
+static void check_dims(int n, int m) {
+	if (n != m)
+		throw "operand size mismatch";
+}
+
 cl_platform_id _opencl_context::get_platform() {
 	cl_platform_id a[1];
 	clGetPlatformIDs(1, a, NULL);
@@ -56,8 +61,11 @@ cl_program _opencl_context::get_program(cl_device_id device, cl_context context)
 }
 
 cl_kernel _opencl_context::get_kernel(std::string name) {
-	if (!kernel_cache.count(name))
-		kernel_cache[name] = clCreateKernel(program, name.c_str(), NULL);
+	if (!kernel_cache.count(name)) {
+		int err;
+		kernel_cache[name] = clCreateKernel(program, name.c_str(), &err);
+		std::cerr << "kernel error " << name << ' ' << err << '\n';
+	}
 	return kernel_cache[name];
 }
 
@@ -115,7 +123,7 @@ void _opencl_context::run_kernel_impl(std::string name, std::vector<int> dims, i
 		throw "invalid number of dimensions";
 	}
 
-	std::cerr << "lansiram sa parametrima: " << dc << ' ' << gws[0] << ' ' << lws[0] << '\n';
+	// std::cerr << "lansiram sa parametrima: " << dc << ' ' << gws[0] << ' ' << lws[0] << '\n';
 
 	clEnqueueNDRangeKernel(queue, get_kernel(name),
 		dc, NULL, gws, lws,
@@ -138,8 +146,7 @@ void _opencl_context::run_kernel(std::string name, std::vector<int> dims, T... a
 }
 
 void cl_vec::set(const la::vec& v) {
-	if (n != v.size())
-		throw "operand size mismatch";
+	check_dims(n, v.size());
 	clEnqueueWriteBuffer(context->queue, mem, 1,
 		0, sizeof(float)*n, v.begin(),
 		0, NULL, NULL);
@@ -147,10 +154,9 @@ void cl_vec::set(const la::vec& v) {
 }
 
 cl_vec cl_vec::operator-(const cl_vec& b) const {
-	if (n != b.n)
-		throw "operand size mismatch";
+	check_dims(n, b.n);
 	auto r = context->vec(b.n);
-	context->run_kernel("vsub", {}, mem, b.mem, r.mem, n);
+	context->run_kernel("vsub", {(n+3)/4}, mem, b.mem, r.mem, n);
 	return r;
 }
 
@@ -174,6 +180,87 @@ cl_vec::~cl_vec() {
 
 void _opencl_context::recycle(int n, cl_mem mem) {
 	available_buffers[n].push_back(mem);
+}
+
+cl_vec& cl_vec::operator= (const cl_vec& b) {
+	if (this != &b) {
+		check_dims(n, b.n);
+		context->run_kernel("vcopy", {(n+3)/4}, b.mem, mem, n);
+	}
+	return *this;
+}
+
+cl_val::cl_val(_opencl_context* context, float val):
+	context(context), val(val) {}
+
+cl_val _opencl_context::val(float f) {
+	return cl_val(this, f);
+}
+
+cl_mat cl_mat::T() const {
+	auto r = context->mat(m, n);
+	context->run_kernel("mt", {(n+1)/2, (m+1)/2},
+		mem, r.mem, n, m);
+	return r;
+}
+
+cl_vec cl_mat::dot(const cl_vec& v) const {
+	check_dims(m, v.n);
+	auto r = context->vec(n);
+	context->run_kernel("mvdot", {n}, mem, v.mem, r.mem, n, m);
+	return r;
+}
+
+cl_vec cl_vec::operator* (const cl_val& v) const {
+	auto r = context->vec(n);
+	context->run_kernel("vsmul", {(n+3)/4}, mem, r.mem, v.val, n);
+	return r;
+}
+
+cl_vec& cl_vec::operator-= (const cl_vec& v) {
+	check_dims(n, v.n);
+	context->run_kernel("vsubc", {(n+3)/4}, mem, v.mem, n);
+	return *this;
+}
+
+void cl_mat::set(const la::mat& a) {
+	check_dims(n, a.rows());
+	check_dims(m, a.cols());
+	float* buff = new float[n * m];
+	for (int i=0; i<n; i++) {
+		for (int j=0; j<m; j++) {
+			buff[i + j*n] = a[i][j];
+		}
+	}
+	clEnqueueWriteBuffer(context->queue, mem, 1,
+		0, sizeof(float) * n * m, buff,
+		0, NULL, NULL);
+	clFinish(context->queue);
+	delete[] buff;
+}
+
+la::mat cl_mat::get() const {
+	la::mat a(n, m);
+	float* buff = new float[n * m];
+	clEnqueueReadBuffer(context->queue, mem, 1,
+		0, sizeof(float) * n * m, buff,
+		0, NULL, NULL);
+	for (int i=0; i<n; i++) {
+		for (int j=0; j<m; j++) {
+			a[i][j] = buff[i + j*n];
+		}
+	}
+	delete[] buff;
+	return a;
+}
+
+cl_mat& cl_mat::operator= (const cl_mat& b) {
+	if (this != &b) {
+		check_dims(n, b.n);
+		check_dims(m, b.m);
+		context->run_kernel("vcopy", {(n*m+3)/4}, b.mem, mem, n*m);
+	}
+	return *this;
 }
 
 } // end namespace iopp
