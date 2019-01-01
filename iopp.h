@@ -21,12 +21,22 @@ protected:
 	cl_mem mem;
 	int n, m;
 	cl_mat(_opencl_context* context, cl_mem mem, int n, int m);
+	void check(const cl_mat& b) const;
+	void destroy();
 public:
+	cl_mat(const cl_mat& b);
+	cl_mat(cl_mat&& b);
+	cl_mat& operator= (const cl_mat& b);
+	cl_mat& operator= (cl_mat&& b);
+	~cl_mat();
+
+	la::mat get() const;
+	void set(const la::mat& a);
+
 	cl_mat T() const;
 	cl_vec dot(const cl_vec& v) const;
-	void set(const la::mat& a);
-	la::mat get() const;
-	cl_mat& operator= (const cl_mat& b);
+
+
 };
 
 class cl_vec {
@@ -38,14 +48,35 @@ protected:
 	cl_mem mem;
 	int n;
 	cl_vec(_opencl_context* context, cl_mem mem, int n);
+	void check(const cl_vec& b) const;
+	void destroy();
 public:
-	void set(const la::vec& v);
-	la::vec get() const;
-	cl_vec operator- (const cl_vec& b) const;
+	cl_vec(const cl_vec& b);
+	cl_vec(cl_vec&& b);
 	cl_vec& operator= (const cl_vec& b);
-	cl_vec& operator-= (const cl_vec& b);
-	cl_vec operator* (const cl_val& y) const;
+	cl_vec& operator= (cl_vec&& b);
 	~cl_vec();
+
+	la::vec get() const;
+	void set(const la::vec& v);
+
+	cl_vec operator+ (const cl_vec& b) const;
+	cl_vec operator- (const cl_vec& b) const;
+	cl_vec operator* (const cl_vec& b) const;
+	cl_vec operator/ (const cl_vec& b) const;
+	cl_vec& operator+= (const cl_vec& b);
+	cl_vec& operator-= (const cl_vec& b);
+	cl_vec& operator*= (const cl_vec& b);
+	cl_vec& operator/= (const cl_vec& b);
+
+	cl_vec operator+ (const cl_val& b) const;
+	cl_vec operator- (const cl_val& b) const;
+	cl_vec operator* (const cl_val& b) const;
+	cl_vec operator/ (const cl_val& b) const;
+	cl_vec& operator+= (const cl_val& b);
+	cl_vec& operator-= (const cl_val& b);
+	cl_vec& operator*= (const cl_val& b);
+	cl_vec& operator/= (const cl_val& b);
 };
 
 class cl_val {
@@ -81,6 +112,9 @@ protected:
 	_opencl_context();
 	cl_mem new_buffer(int len);
 	void recycle(int n, cl_mem mem);
+	void mem_read(cl_mem src, void* dest, int n);
+	void mem_write(const void* src, cl_mem dest, int n);
+	void mem_copy(cl_mem src, cl_mem dest, int n);
 
 	template<class T, class... U>
 	void run_kernel_impl(std::string name, std::vector<int> dims,

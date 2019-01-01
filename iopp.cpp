@@ -11,6 +11,278 @@ static void check_dims(int n, int m) {
 		throw "operand size mismatch";
 }
 
+
+
+
+//
+// cl_mat
+//
+
+
+
+
+
+cl_mat::cl_mat(_opencl_context* context, cl_mem mem, int n, int m)
+	: context(context), mem(mem), n(n), m(m) {}
+
+void cl_mat::check(const cl_mat& b) const {
+	if (!(n == b.n && m == b.m))
+		throw "operand size mismatch";
+	if (!(context == b.context))
+		throw "operand context mismatch";
+}
+
+void cl_mat::destroy() {
+	if (context && mem) {
+		context->recycle(n*m*sizeof(float), mem);
+		mem = NULL;
+	}
+}
+
+cl_mat::cl_mat(const cl_mat& b) : context(b.context),
+	mem(b.context->new_buffer(b.n*b.m*sizeof(float))), n(b.n), m(b.m)
+{}
+
+cl_mat::cl_mat(cl_mat&& b) : context(b.context), mem(b.mem), n(b.n), m(b.m) {
+	b.destroy();
+}
+
+cl_mat& cl_mat::operator= (const cl_mat& b) {
+	if (this != &b) {
+		check(b);
+		context->mem_copy(b.mem, mem, n*m*sizeof(float));
+	}
+	return *this;
+}
+
+cl_mat& cl_mat::operator= (cl_mat&& b) {
+	if (this != &b) {
+		check(b);
+		mem = b.mem;
+		b.mem = NULL;
+		b.destroy();
+	}
+	return *this;
+}
+
+cl_mat::~cl_mat() {
+	destroy();
+}
+
+la::mat cl_mat::get() const {
+	la::mat a(n, m);
+	float* buff = new float[n * m];
+	context->mem_read(mem, buff, n*m*sizeof(float));
+	for (int i=0; i<n; i++) {
+		for (int j=0; j<m; j++) {
+			a[i][j] = buff[i + j*n];
+		}
+	}
+	delete[] buff;
+	return a;
+}
+
+void cl_mat::set(const la::mat& a) {
+	check_dims(n, a.rows());
+	check_dims(m, a.cols());
+	float* buff = new float[n * m];
+	for (int i=0; i<n; i++) {
+		for (int j=0; j<m; j++) {
+			buff[i + j*n] = a[i][j];
+		}
+	}
+	context->mem_write(buff, mem, n*m*sizeof(float));
+	delete[] buff;
+}
+
+cl_mat cl_mat::T() const {
+	auto r = context->mat(m, n);
+	context->run_kernel("mt", {(n+1)/2, (m+1)/2},
+		mem, r.mem, n, m);
+	return r;
+}
+
+cl_vec cl_mat::dot(const cl_vec& v) const {
+	check_dims(m, v.n);
+	auto r = context->vec(n);
+	context->run_kernel("mvdot", {n}, mem, v.mem, r.mem, n, m);
+	return r;
+}
+
+
+
+//
+// cl_vec
+//
+
+
+
+
+void cl_vec::check(const cl_vec& b) const {
+	if (!(n == b.n))
+		throw "operand size mismatch";
+	if (!(context == b.context))
+		throw "operand context mismatch";
+}
+
+void cl_vec::destroy() {
+	if (context && mem) {
+		context->recycle(n*sizeof(float), mem);
+		mem = NULL;
+	}
+}
+
+cl_vec::cl_vec(const cl_vec& b) : context(b.context),
+	mem(b.context->new_buffer(b.n*sizeof(float))), n(b.n) {}
+
+cl_vec::cl_vec(cl_vec&& b) : context(b.context), mem(b.mem), n(b.n) {
+	b.destroy();
+}
+
+cl_vec& cl_vec::operator= (const cl_vec& b) {
+	if (this != &b) {
+		check(b);
+		context->mem_copy(b.mem, mem, n*sizeof(float));
+	}
+	return *this;
+}
+
+cl_vec& cl_vec::operator= (cl_vec&& b) {
+	if (this != &b) {
+		check(b);
+		mem = b.mem;
+		b.mem = NULL;
+		b.destroy();
+	}
+	return *this;
+}
+
+cl_vec::~cl_vec() {
+	destroy();
+}
+
+la::vec cl_vec::get() const {
+	la::vec v(n);
+	context->mem_read(mem, v.begin(), n*sizeof(float));
+	return v;
+}
+
+void cl_vec::set(const la::vec& v) {
+	check_dims(n, v.size());
+	context->mem_write(v.begin(), mem, n*sizeof(float));
+}
+
+
+
+cl_vec cl_vec::operator+(const cl_vec& b) const {
+	check(b);
+	auto r = context->vec(b.n);
+	context->run_kernel("vadd", {(n+3)/4}, mem, b.mem, r.mem, n);
+	return r;
+}
+
+cl_vec cl_vec::operator-(const cl_vec& b) const {
+	check(b);
+	auto r = context->vec(b.n);
+	context->run_kernel("vsub", {(n+3)/4}, mem, b.mem, r.mem, n);
+	return r;
+}
+
+cl_vec cl_vec::operator*(const cl_vec& b) const {
+	check(b);
+	auto r = context->vec(b.n);
+	context->run_kernel("vmul", {(n+3)/4}, mem, b.mem, r.mem, n);
+	return r;
+}
+
+cl_vec cl_vec::operator/(const cl_vec& b) const {
+	check(b);
+	auto r = context->vec(b.n);
+	context->run_kernel("vdiv", {(n+3)/4}, mem, b.mem, r.mem, n);
+	return r;
+}
+
+
+
+cl_vec& cl_vec::operator+= (const cl_vec& v) {
+	check(v);
+	context->run_kernel("vaddc", {(n+3)/4}, mem, v.mem, n);
+	return *this;
+}
+
+cl_vec& cl_vec::operator-= (const cl_vec& v) {
+	check(v);
+	context->run_kernel("vsubc", {(n+3)/4}, mem, v.mem, n);
+	return *this;
+}
+
+cl_vec& cl_vec::operator*= (const cl_vec& v) {
+	check(v);
+	context->run_kernel("vmulc", {(n+3)/4}, mem, v.mem, n);
+	return *this;
+}
+
+cl_vec& cl_vec::operator/= (const cl_vec& v) {
+	check(v);
+	context->run_kernel("vdivc", {(n+3)/4}, mem, v.mem, n);
+	return *this;
+}
+
+
+
+cl_vec cl_vec::operator+ (const cl_val& v) const {
+	auto r = context->vec(n);
+	context->run_kernel("vsadd", {(n+3)/4}, mem, r.mem, v.val, n);
+	return r;
+}
+
+cl_vec cl_vec::operator- (const cl_val& v) const {
+	auto r = context->vec(n);
+	context->run_kernel("vssub", {(n+3)/4}, mem, r.mem, v.val, n);
+	return r;
+}
+
+cl_vec cl_vec::operator* (const cl_val& v) const {
+	auto r = context->vec(n);
+	context->run_kernel("vsmul", {(n+3)/4}, mem, r.mem, v.val, n);
+	return r;
+}
+
+cl_vec cl_vec::operator/ (const cl_val& v) const {
+	auto r = context->vec(n);
+	context->run_kernel("vsdiv", {(n+3)/4}, mem, r.mem, v.val, n);
+	return r;
+}
+
+
+
+cl_vec& cl_vec::operator+= (const cl_val& v) {
+	context->run_kernel("vsaddc", {(n+3)/4}, mem, v.val, n);
+	return *this;
+}
+
+cl_vec& cl_vec::operator-= (const cl_val& v) {
+	context->run_kernel("vssubc", {(n+3)/4}, mem, v.val, n);
+	return *this;
+}
+
+cl_vec& cl_vec::operator*= (const cl_val& v) {
+	context->run_kernel("vsmulc", {(n+3)/4}, mem, v.val, n);
+	return *this;
+}
+
+cl_vec& cl_vec::operator/= (const cl_val& v) {
+	context->run_kernel("vsdivc", {(n+3)/4}, mem, v.val, n);
+	return *this;
+}
+
+//
+// _opencl_context (i ostalo, trenutno)
+//
+
+
+
+
 cl_platform_id _opencl_context::get_platform() {
 	cl_platform_id a[1];
 	clGetPlatformIDs(1, a, NULL);
@@ -80,7 +352,7 @@ _opencl_context::_opencl_context() {
 cl_mem _opencl_context::new_buffer(int len) {
 	if (available_buffers[len].empty()) {
 		return clCreateBuffer(context, CL_MEM_READ_WRITE,
-			len * sizeof(cl_float), NULL, NULL);
+			len, NULL, NULL);
 	} else {
 		auto buff = available_buffers[len].back();
 		available_buffers[len].pop_back();
@@ -88,18 +360,15 @@ cl_mem _opencl_context::new_buffer(int len) {
 	}
 }
 
-cl_mat::cl_mat(_opencl_context* context, cl_mem mem, int n, int m)
-	: context(context), mem(mem), n(n), m(m) {}
-
 cl_vec::cl_vec(_opencl_context* context, cl_mem mem, int n)
 	: context(context), mem(mem), n(n) {}
 
 cl_mat _opencl_context::mat(int n, int m) {
-	return cl_mat(this, new_buffer(n*m), n, m);
+	return cl_mat(this, new_buffer(n*m*sizeof(float)), n, m);
 }
 
 cl_vec _opencl_context::vec(int n) {
-	return cl_vec(this, new_buffer(n), n);
+	return cl_vec(this, new_buffer(n*sizeof(float)), n);
 }
 
 void _opencl_context::run_kernel_impl(std::string name, std::vector<int> dims, int cnt) {
@@ -145,49 +414,12 @@ void _opencl_context::run_kernel(std::string name, std::vector<int> dims, T... a
 	run_kernel_impl(name, dims, 0, args...);
 }
 
-void cl_vec::set(const la::vec& v) {
-	check_dims(n, v.size());
-	clEnqueueWriteBuffer(context->queue, mem, 1,
-		0, sizeof(float)*n, v.begin(),
-		0, NULL, NULL);
-	clFinish(context->queue);
-}
-
-cl_vec cl_vec::operator-(const cl_vec& b) const {
-	check_dims(n, b.n);
-	auto r = context->vec(b.n);
-	context->run_kernel("vsub", {(n+3)/4}, mem, b.mem, r.mem, n);
-	return r;
-}
-
-la::vec cl_vec::get() const {
-	la::vec r(n);
-	clEnqueueReadBuffer(context->queue, mem, 1,
-		0, sizeof(float)*n, r.begin(),
-		0, NULL, NULL);
-	return r;
-}
-
 _opencl_context opencl_context() {
 	return _opencl_context();
 }
 
-cl_vec::~cl_vec() {
-	if (context) {
-		context->recycle(n, mem);
-	}
-}
-
 void _opencl_context::recycle(int n, cl_mem mem) {
 	available_buffers[n].push_back(mem);
-}
-
-cl_vec& cl_vec::operator= (const cl_vec& b) {
-	if (this != &b) {
-		check_dims(n, b.n);
-		context->run_kernel("vcopy", {(n+3)/4}, b.mem, mem, n);
-	}
-	return *this;
 }
 
 cl_val::cl_val(_opencl_context* context, float val):
@@ -197,70 +429,24 @@ cl_val _opencl_context::val(float f) {
 	return cl_val(this, f);
 }
 
-cl_mat cl_mat::T() const {
-	auto r = context->mat(m, n);
-	context->run_kernel("mt", {(n+1)/2, (m+1)/2},
-		mem, r.mem, n, m);
-	return r;
+
+void _opencl_context::mem_copy(cl_mem src, cl_mem dest, int n) {
+	clEnqueueCopyBuffer(queue, src, dest, 0, 0, n, 0, NULL, NULL);
+	clFinish(queue);
 }
 
-cl_vec cl_mat::dot(const cl_vec& v) const {
-	check_dims(m, v.n);
-	auto r = context->vec(n);
-	context->run_kernel("mvdot", {n}, mem, v.mem, r.mem, n, m);
-	return r;
-}
-
-cl_vec cl_vec::operator* (const cl_val& v) const {
-	auto r = context->vec(n);
-	context->run_kernel("vsmul", {(n+3)/4}, mem, r.mem, v.val, n);
-	return r;
-}
-
-cl_vec& cl_vec::operator-= (const cl_vec& v) {
-	check_dims(n, v.n);
-	context->run_kernel("vsubc", {(n+3)/4}, mem, v.mem, n);
-	return *this;
-}
-
-void cl_mat::set(const la::mat& a) {
-	check_dims(n, a.rows());
-	check_dims(m, a.cols());
-	float* buff = new float[n * m];
-	for (int i=0; i<n; i++) {
-		for (int j=0; j<m; j++) {
-			buff[i + j*n] = a[i][j];
-		}
-	}
-	clEnqueueWriteBuffer(context->queue, mem, 1,
-		0, sizeof(float) * n * m, buff,
+void _opencl_context::mem_read(cl_mem src, void* dest, int n) {
+	clEnqueueReadBuffer(queue, src, 1,
+		0, n, dest,
 		0, NULL, NULL);
-	clFinish(context->queue);
-	delete[] buff;
+	clFinish(queue);
 }
 
-la::mat cl_mat::get() const {
-	la::mat a(n, m);
-	float* buff = new float[n * m];
-	clEnqueueReadBuffer(context->queue, mem, 1,
-		0, sizeof(float) * n * m, buff,
+void _opencl_context::mem_write(const void* src, cl_mem dest, int n) {
+	clEnqueueWriteBuffer(queue, dest, 1,
+		0, n, src,
 		0, NULL, NULL);
-	for (int i=0; i<n; i++) {
-		for (int j=0; j<m; j++) {
-			a[i][j] = buff[i + j*n];
-		}
-	}
-	delete[] buff;
-	return a;
-}
-
-cl_mat& cl_mat::operator= (const cl_mat& b) {
-	if (this != &b) {
-		check_dims(n, b.n);
-		check_dims(m, b.m);
-		context->run_kernel("vcopy", {(n*m+3)/4}, b.mem, mem, n*m);
-	}
-	return *this;
+	clFinish(queue);
 }
 
 } // end namespace iopp

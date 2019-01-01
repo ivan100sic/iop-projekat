@@ -5,10 +5,21 @@
 #include <algorithm>
 // using namespace iopp;
 
+auto ct = iopp::opencl_context();
+
+void compile_check() {
+	auto v = ct.vec(10);
+	v.set({1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
+	v = v - v * v / v + v;
+	v.get();
+	v += v -= v *= v /= v;
+
+	auto a = ct.val(3.33);
+	v = (v + a - a) * a / a;
+	v += v -= v *= v /= a;
+}
 
 void medium_test() {
-	auto ct = iopp::opencl_context();
-
 	int n = 8192, m = 8192;
 
 	auto F = ct.mat(n, m);
@@ -33,13 +44,15 @@ void medium_test() {
 
 	// train w
 
-	auto FT = F.T();
+	auto FT_temp = F.T();
+	auto FT = ct.mat(m, n);
+	FT = std::move(FT_temp);
 
 	stopwatch sw(0);
 
 	for (int i=0; i<1 * 1024; i++) {
 		auto tmp = F.dot(w) - t;
-		w -= FT.dot(tmp) * alpha;
+		w = w - FT.dot(tmp) * alpha;
 	}
 
 	sw.tock();
@@ -91,6 +104,7 @@ void simple_test() {
 
 
 int main() {
+	compile_check();
 	// simple_test();
 	medium_test();
 }

@@ -1,17 +1,17 @@
 #define LOCAL_SIZE 16
 #define LOCAL_SIZE_SQRT 4
+#define LOOP int i = get_global_id(0) * 4, j; for (j=i; j<i+4; j++) if (j < n)
 
-kernel void vcopy(
+// u + v
+
+kernel void vadd(
 	global float* a,
 	global float* b,
+	global float* c,
 	int n
 ) {
-	int i = get_global_id(0) * 4, j;
-	for (j=i; j<i+4; j++) {
-		if (j < n) {
-			b[j] = a[j];
-		}
-	}
+	LOOP
+		c[j] = a[j] + b[j];
 }
 
 kernel void vsub(
@@ -20,13 +20,149 @@ kernel void vsub(
 	global float* c,
 	int n
 ) {
-	int i = get_global_id(0) * 4, j;
-	for (j=i; j<i+4; j++) {
-		if (j < n) {
-			c[j] = a[j] - b[j];
-		}
-	}
+	LOOP
+		c[j] = a[j] - b[j];
 }
+
+kernel void vmul(
+	global float* a,
+	global float* b,
+	global float* c,
+	int n
+) {
+	LOOP
+		c[j] = a[j] * b[j];
+}
+
+kernel void vdiv(
+	global float* a,
+	global float* b,
+	global float* c,
+	int n
+) {
+	LOOP
+		c[j] = a[j] / b[j];
+}
+
+// u += v
+
+kernel void vaddc(
+	global float* a,
+	global float* b,
+	int n
+) {
+	LOOP
+		a[j] += b[j];
+}
+
+kernel void vsubc(
+	global float* a,
+	global float* b,
+	int n
+) {
+	LOOP
+		a[j] -= b[j];
+}
+
+kernel void vmulc(
+	global float* a,
+	global float* b,
+	int n
+) {
+	LOOP
+		a[j] *= b[j];
+}
+
+kernel void vdivc(
+	global float* a,
+	global float* b,
+	int n
+) {
+	LOOP
+		a[j] *= b[j];
+}
+
+// u + x
+
+kernel void vsadd(
+	global float* a,
+	global float* b,
+	float y,
+	int n
+) {
+	LOOP
+		b[j] = a[j] + y;
+}
+
+kernel void vssub(
+	global float* a,
+	global float* b,
+	float y,
+	int n
+) {
+	LOOP
+		b[j] = a[j] - y;
+}
+
+kernel void vsmul(
+	global float* a,
+	global float* b,
+	float y,
+	int n
+) {
+	LOOP
+		b[j] = a[j] * y;
+}
+
+kernel void vsdiv(
+	global float* a,
+	global float* b,
+	float y,
+	int n
+) {
+	LOOP
+		b[j] = a[j] / y;
+}
+
+// u += x
+
+kernel void vsaddc(
+	global float* a,
+	float y,
+	int n
+) {
+	LOOP
+		a[j] += y;
+}
+
+kernel void vssubc(
+	global float* a,
+	float y,
+	int n
+) {
+	LOOP
+		a[j] -= y;
+}
+
+kernel void vsmulc(
+	global float* a,
+	float y,
+	int n
+) {
+	LOOP
+		a[j] *= y;
+}
+
+kernel void vsdivc(
+	global float* a,
+	float y,
+	int n
+) {
+	LOOP
+		a[j] /= y;
+}
+
+// matrix ops and others
 
 kernel void mt(
 	global float* a,
@@ -59,31 +195,4 @@ kernel void mvdot(
 		z += a[i + j*n] * b[j];
 	}
 	c[i] = z;
-}
-
-kernel void vsmul(
-	global float* a,
-	global float* b,
-	float y,
-	int n
-) {
-	int i = get_global_id(0) * 4, j;
-	for (j=i; j<i+4; j++) {
-		if (j < n) {
-			b[j] = a[j] * y;
-		}
-	}
-}
-
-kernel void vsubc(
-	global float* a,
-	global float* b,
-	int n
-) {
-	int i = get_global_id(0) * 4, j;
-	for (j=i; j<i+4; j++) {
-		if (j < n) {
-			a[j] -= b[j];
-		}
-	}
 }
