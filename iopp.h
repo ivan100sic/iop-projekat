@@ -5,6 +5,10 @@
 #include <vector>
 #include <string>
 
+#define LOCAL_SIZE 64
+#define LOCAL_SIZE_SQRT 8
+#define BLOCK_SIZE 1
+
 namespace iopp {
 
 class _opencl_context;
@@ -35,8 +39,25 @@ public:
 
 	cl_mat T() const;
 	cl_vec dot(const cl_vec& v) const;
+	cl_mat dot(const cl_mat& v) const;
 
+	cl_mat operator+ (const cl_mat& b) const;
+	cl_mat operator- (const cl_mat& b) const;
+	cl_mat operator* (const cl_mat& b) const;
+	cl_mat operator/ (const cl_mat& b) const;
+	cl_mat& operator+= (const cl_mat& b);
+	cl_mat& operator-= (const cl_mat& b);
+	cl_mat& operator*= (const cl_mat& b);
+	cl_mat& operator/= (const cl_mat& b);
 
+	cl_mat operator+ (const cl_val& b) const;
+	cl_mat operator- (const cl_val& b) const;
+	cl_mat operator* (const cl_val& b) const;
+	cl_mat operator/ (const cl_val& b) const;
+	cl_mat& operator+= (const cl_val& b);
+	cl_mat& operator-= (const cl_val& b);
+	cl_mat& operator*= (const cl_val& b);
+	cl_mat& operator/= (const cl_val& b);
 };
 
 class cl_vec {
@@ -59,6 +80,11 @@ public:
 
 	la::vec get() const;
 	void set(const la::vec& v);
+	void run_function(const char* fn);
+
+	cl_val sum() const;
+	cl_val dot(const cl_vec& b) const;
+	cl_mat outer(const cl_vec& b) const;
 
 	cl_vec operator+ (const cl_vec& b) const;
 	cl_vec operator- (const cl_vec& b) const;
@@ -87,6 +113,8 @@ protected:
 	_opencl_context* context;
 	float val;
 	cl_val(_opencl_context* context, float val);
+public:
+	float get() const;
 };
 
 class _opencl_context {
@@ -133,5 +161,8 @@ public:
 };
 
 _opencl_context opencl_context();
+
+void sqrt(cl_vec& v);
+void exp(cl_vec& v);
 
 } // end namespace iopp

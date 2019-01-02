@@ -1,17 +1,17 @@
 // #pragma once
 #include "iopp.h"
+#include <cmath>
 
 namespace iopp {
-
-const int LOCAL_SIZE = 16;
-const int LOCAL_SIZE_SQRT = 4;
 
 static void check_dims(int n, int m) {
 	if (n != m)
 		throw "operand size mismatch";
 }
 
-
+static int threads1d(int n) {
+	return (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+}
 
 
 //
@@ -59,7 +59,6 @@ cl_mat& cl_mat::operator= (cl_mat&& b) {
 	if (this != &b) {
 		check(b);
 		mem = b.mem;
-		b.mem = NULL;
 		b.destroy();
 	}
 	return *this;
@@ -87,8 +86,9 @@ void cl_mat::set(const la::mat& a) {
 	check_dims(m, a.cols());
 	float* buff = new float[n * m];
 	for (int i=0; i<n; i++) {
+		const auto& row = a[i];
 		for (int j=0; j<m; j++) {
-			buff[i + j*n] = a[i][j];
+			buff[i + j*n] = row[j];
 		}
 	}
 	context->mem_write(buff, mem, n*m*sizeof(float));
@@ -97,8 +97,7 @@ void cl_mat::set(const la::mat& a) {
 
 cl_mat cl_mat::T() const {
 	auto r = context->mat(m, n);
-	context->run_kernel("mt", {(n+1)/2, (m+1)/2},
-		mem, r.mem, n, m);
+	context->run_kernel("mt", {n, m}, mem, r.mem, n, m);
 	return r;
 }
 
@@ -107,6 +106,117 @@ cl_vec cl_mat::dot(const cl_vec& v) const {
 	auto r = context->vec(n);
 	context->run_kernel("mvdot", {n}, mem, v.mem, r.mem, n, m);
 	return r;
+}
+
+cl_mat cl_mat::dot(const cl_mat& v) const {
+	check_dims(m, v.n);
+	auto r = context->mat(n, v.m);
+	context->run_kernel("mmdot", {n, v.m}, mem, v.mem, r.mem, n, m, v.m);
+	return r;
+}
+
+
+
+cl_mat cl_mat::operator+(const cl_mat& b) const {
+	check(b);
+	auto r = context->mat(b.n, b.m);
+	context->run_kernel("vadd", {threads1d(n*m)}, mem, b.mem, r.mem, n*m);
+	return r;
+}
+
+cl_mat cl_mat::operator-(const cl_mat& b) const {
+	check(b);
+	auto r = context->mat(b.n, b.m);
+	context->run_kernel("vsub", {threads1d(n*m)}, mem, b.mem, r.mem, n*m);
+	return r;
+}
+
+cl_mat cl_mat::operator*(const cl_mat& b) const {
+	check(b);
+	auto r = context->mat(b.n, b.m);
+	context->run_kernel("vmul", {threads1d(n*m)}, mem, b.mem, r.mem, n*m);
+	return r;
+}
+
+cl_mat cl_mat::operator/(const cl_mat& b) const {
+	check(b);
+	auto r = context->mat(b.n, b.m);
+	context->run_kernel("vdiv", {threads1d(n*m)}, mem, b.mem, r.mem, n*m);
+	return r;
+}
+
+
+
+cl_mat& cl_mat::operator+= (const cl_mat& v) {
+	check(v);
+	context->run_kernel("vaddc", {threads1d(n*m)}, mem, v.mem, n*m);
+	return *this;
+}
+
+cl_mat& cl_mat::operator-= (const cl_mat& v) {
+	check(v);
+	context->run_kernel("vsubc", {threads1d(n*m)}, mem, v.mem, n*m);
+	return *this;
+}
+
+cl_mat& cl_mat::operator*= (const cl_mat& v) {
+	check(v);
+	context->run_kernel("vmulc", {threads1d(n*m)}, mem, v.mem, n*m);
+	return *this;
+}
+
+cl_mat& cl_mat::operator/= (const cl_mat& v) {
+	check(v);
+	context->run_kernel("vdivc", {threads1d(n*m)}, mem, v.mem, n*m);
+	return *this;
+}
+
+
+
+cl_mat cl_mat::operator+ (const cl_val& v) const {
+	auto r = context->mat(n, m);
+	context->run_kernel("vsadd", {threads1d(n*m)}, mem, r.mem, v.val, n*m);
+	return r;
+}
+
+cl_mat cl_mat::operator- (const cl_val& v) const {
+	auto r = context->mat(n, m);
+	context->run_kernel("vssub", {threads1d(n*m)}, mem, r.mem, v.val, n*m);
+	return r;
+}
+
+cl_mat cl_mat::operator* (const cl_val& v) const {
+	auto r = context->mat(n, m);
+	context->run_kernel("vsmul", {threads1d(n*m)}, mem, r.mem, v.val, n*m);
+	return r;
+}
+
+cl_mat cl_mat::operator/ (const cl_val& v) const {
+	auto r = context->mat(n, m);
+	context->run_kernel("vsdiv", {threads1d(n*m)}, mem, r.mem, v.val, n*m);
+	return r;
+}
+
+
+
+cl_mat& cl_mat::operator+= (const cl_val& v) {
+	context->run_kernel("vsaddc", {threads1d(n*m)}, mem, v.val, n*m);
+	return *this;
+}
+
+cl_mat& cl_mat::operator-= (const cl_val& v) {
+	context->run_kernel("vssubc", {threads1d(n*m)}, mem, v.val, n*m);
+	return *this;
+}
+
+cl_mat& cl_mat::operator*= (const cl_val& v) {
+	context->run_kernel("vsmulc", {threads1d(n*m)}, mem, v.val, n*m);
+	return *this;
+}
+
+cl_mat& cl_mat::operator/= (const cl_val& v) {
+	context->run_kernel("vsdivc", {threads1d(n*m)}, mem, v.val, n*m);
+	return *this;
 }
 
 
@@ -151,7 +261,6 @@ cl_vec& cl_vec::operator= (cl_vec&& b) {
 	if (this != &b) {
 		check(b);
 		mem = b.mem;
-		b.mem = NULL;
 		b.destroy();
 	}
 	return *this;
@@ -172,33 +281,57 @@ void cl_vec::set(const la::vec& v) {
 	context->mem_write(v.begin(), mem, n*sizeof(float));
 }
 
+void cl_vec::run_function(const char* fn) {
+	context->run_kernel(fn, {threads1d(n)}, mem, n);
+}
+
+cl_val cl_vec::sum() const {
+	int threads = std::max(LOCAL_SIZE, LOCAL_SIZE * (int)::sqrt(n / 512.0));
+	cl_vec temp = context->vec(threads);
+	context->run_kernel("rdsum_1", {threads}, mem, temp.mem, n, threads);
+	context->run_kernel("rdsum_2", {}, temp.mem, threads);
+	float x;
+	context->mem_read(temp.mem, &x, sizeof(float));
+	return context->val(x);
+}
+
+cl_val cl_vec::dot(const cl_vec& b) const {
+	return (*this * b).sum();
+}
+
+cl_mat cl_vec::outer(const cl_vec& b) const {
+	auto r = context->mat(n, b.n);
+	context->run_kernel("vvouter", {n, b.n}, mem, b.mem, r.mem, n, b.n);
+	return r;
+}
+
 
 
 cl_vec cl_vec::operator+(const cl_vec& b) const {
 	check(b);
 	auto r = context->vec(b.n);
-	context->run_kernel("vadd", {(n+3)/4}, mem, b.mem, r.mem, n);
+	context->run_kernel("vadd", {threads1d(n)}, mem, b.mem, r.mem, n);
 	return r;
 }
 
 cl_vec cl_vec::operator-(const cl_vec& b) const {
 	check(b);
 	auto r = context->vec(b.n);
-	context->run_kernel("vsub", {(n+3)/4}, mem, b.mem, r.mem, n);
+	context->run_kernel("vsub", {threads1d(n)}, mem, b.mem, r.mem, n);
 	return r;
 }
 
 cl_vec cl_vec::operator*(const cl_vec& b) const {
 	check(b);
 	auto r = context->vec(b.n);
-	context->run_kernel("vmul", {(n+3)/4}, mem, b.mem, r.mem, n);
+	context->run_kernel("vmul", {threads1d(n)}, mem, b.mem, r.mem, n);
 	return r;
 }
 
 cl_vec cl_vec::operator/(const cl_vec& b) const {
 	check(b);
 	auto r = context->vec(b.n);
-	context->run_kernel("vdiv", {(n+3)/4}, mem, b.mem, r.mem, n);
+	context->run_kernel("vdiv", {threads1d(n)}, mem, b.mem, r.mem, n);
 	return r;
 }
 
@@ -206,25 +339,25 @@ cl_vec cl_vec::operator/(const cl_vec& b) const {
 
 cl_vec& cl_vec::operator+= (const cl_vec& v) {
 	check(v);
-	context->run_kernel("vaddc", {(n+3)/4}, mem, v.mem, n);
+	context->run_kernel("vaddc", {threads1d(n)}, mem, v.mem, n);
 	return *this;
 }
 
 cl_vec& cl_vec::operator-= (const cl_vec& v) {
 	check(v);
-	context->run_kernel("vsubc", {(n+3)/4}, mem, v.mem, n);
+	context->run_kernel("vsubc", {threads1d(n)}, mem, v.mem, n);
 	return *this;
 }
 
 cl_vec& cl_vec::operator*= (const cl_vec& v) {
 	check(v);
-	context->run_kernel("vmulc", {(n+3)/4}, mem, v.mem, n);
+	context->run_kernel("vmulc", {threads1d(n)}, mem, v.mem, n);
 	return *this;
 }
 
 cl_vec& cl_vec::operator/= (const cl_vec& v) {
 	check(v);
-	context->run_kernel("vdivc", {(n+3)/4}, mem, v.mem, n);
+	context->run_kernel("vdivc", {threads1d(n)}, mem, v.mem, n);
 	return *this;
 }
 
@@ -232,47 +365,47 @@ cl_vec& cl_vec::operator/= (const cl_vec& v) {
 
 cl_vec cl_vec::operator+ (const cl_val& v) const {
 	auto r = context->vec(n);
-	context->run_kernel("vsadd", {(n+3)/4}, mem, r.mem, v.val, n);
+	context->run_kernel("vsadd", {threads1d(n)}, mem, r.mem, v.val, n);
 	return r;
 }
 
 cl_vec cl_vec::operator- (const cl_val& v) const {
 	auto r = context->vec(n);
-	context->run_kernel("vssub", {(n+3)/4}, mem, r.mem, v.val, n);
+	context->run_kernel("vssub", {threads1d(n)}, mem, r.mem, v.val, n);
 	return r;
 }
 
 cl_vec cl_vec::operator* (const cl_val& v) const {
 	auto r = context->vec(n);
-	context->run_kernel("vsmul", {(n+3)/4}, mem, r.mem, v.val, n);
+	context->run_kernel("vsmul", {threads1d(n)}, mem, r.mem, v.val, n);
 	return r;
 }
 
 cl_vec cl_vec::operator/ (const cl_val& v) const {
 	auto r = context->vec(n);
-	context->run_kernel("vsdiv", {(n+3)/4}, mem, r.mem, v.val, n);
+	context->run_kernel("vsdiv", {threads1d(n)}, mem, r.mem, v.val, n);
 	return r;
 }
 
 
 
 cl_vec& cl_vec::operator+= (const cl_val& v) {
-	context->run_kernel("vsaddc", {(n+3)/4}, mem, v.val, n);
+	context->run_kernel("vsaddc", {threads1d(n)}, mem, v.val, n);
 	return *this;
 }
 
 cl_vec& cl_vec::operator-= (const cl_val& v) {
-	context->run_kernel("vssubc", {(n+3)/4}, mem, v.val, n);
+	context->run_kernel("vssubc", {threads1d(n)}, mem, v.val, n);
 	return *this;
 }
 
 cl_vec& cl_vec::operator*= (const cl_val& v) {
-	context->run_kernel("vsmulc", {(n+3)/4}, mem, v.val, n);
+	context->run_kernel("vsmulc", {threads1d(n)}, mem, v.val, n);
 	return *this;
 }
 
 cl_vec& cl_vec::operator/= (const cl_val& v) {
-	context->run_kernel("vsdivc", {(n+3)/4}, mem, v.val, n);
+	context->run_kernel("vsdivc", {threads1d(n)}, mem, v.val, n);
 	return *this;
 }
 
@@ -351,6 +484,7 @@ _opencl_context::_opencl_context() {
 
 cl_mem _opencl_context::new_buffer(int len) {
 	if (available_buffers[len].empty()) {
+		std::cerr << "allocating new buffer " << len << '\n';
 		return clCreateBuffer(context, CL_MEM_READ_WRITE,
 			len, NULL, NULL);
 	} else {
@@ -429,6 +563,9 @@ cl_val _opencl_context::val(float f) {
 	return cl_val(this, f);
 }
 
+float cl_val::get() const {
+	return val;
+}
 
 void _opencl_context::mem_copy(cl_mem src, cl_mem dest, int n) {
 	clEnqueueCopyBuffer(queue, src, dest, 0, 0, n, 0, NULL, NULL);
@@ -448,5 +585,21 @@ void _opencl_context::mem_write(const void* src, cl_mem dest, int n) {
 		0, NULL, NULL);
 	clFinish(queue);
 }
+
+
+//
+// experiments etc
+//
+
+
+
+void sqrt(cl_vec& a) {
+	a.run_function("vsqrtc");
+}
+
+void exp(cl_vec& a) {
+	a.run_function("vexpc");
+}
+
 
 } // end namespace iopp

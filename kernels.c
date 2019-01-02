@@ -1,6 +1,7 @@
-#define LOCAL_SIZE 16
-#define LOCAL_SIZE_SQRT 4
-#define LOOP int i = get_global_id(0) * 4, j; for (j=i; j<i+4; j++) if (j < n)
+#define LOCAL_SIZE 64
+#define LOCAL_SIZE_SQRT 8
+#define BLOCK_SIZE 1
+#define LOOP int i = get_global_id(0) * BLOCK_SIZE, j; for (j=i; j<i+BLOCK_SIZE; j++) if (j < n)
 
 // u + v
 
@@ -162,7 +163,7 @@ kernel void vsdivc(
 		a[j] /= y;
 }
 
-// matrix ops and others
+// matrix ops
 
 kernel void mt(
 	global float* a,
@@ -170,15 +171,10 @@ kernel void mt(
 	int n,
 	int m
 ) {
-	int i = get_global_id(0) * 2;
-	int j = get_global_id(1) * 2;
-	int ii, jj;
-	for (ii=i; ii<i+2; ii++) {
-		for (jj=j; jj<j+2; jj++) {
-			if (ii < n && jj < m) {
-				b[jj + ii*m] = a[ii + jj*n];
-			}
-		}
+	int i = get_global_id(0);
+	int j = get_global_id(1);
+	if (i < n && j < m) {
+		b[j + i * m] = a[i + j * n];
 	}
 }
 
@@ -195,4 +191,78 @@ kernel void mvdot(
 		z += a[i + j*n] * b[j];
 	}
 	c[i] = z;
+}
+
+kernel void mmdot(
+	global float* a,
+	global float* b,
+	global float* c,
+	int n,
+	int m,
+	int l
+) {
+	int i = get_global_id(0);
+	int j = get_global_id(1);
+	int k;
+	float z = 0.0f;
+	for (k=0; k<m; k++) {
+		z += a[i + k*n] * b[k + j*m];
+	}
+	c[i + j*n] = z;
+}
+
+kernel void vvouter(
+	global float* a,
+	global float* b,
+	global float* c,
+	int n,
+	int m
+) {
+	int i = get_global_id(0);
+	int j = get_global_id(1);
+	c[i + n*j] = a[i] * b[j];
+}
+
+kernel void rdsum_1(
+	global float* a,
+	global float* b,
+	int n,
+	int m
+) {
+	int i = get_global_id(0), j;
+	float z = 0.0f;
+	for (j=i; j<n; j+=m) {
+		z += a[j];
+	}
+	b[i] = z;
+}
+
+kernel void rdsum_2(
+	global float* a,
+	int n
+) {
+	int i;
+	float z = 0.0f;
+	for (i=0; i<n; i++) {
+		z += a[i];
+	}
+	a[0] = z;
+}
+
+// vector functions
+
+kernel void vsqrtc(
+	global float* a,
+	int n
+) {
+	LOOP
+		a[j] = sqrt(a[j]);
+}
+
+kernel void vexpc(
+	global float* a,
+	int n
+) {
+	LOOP
+		a[j] = exp(a[j]);
 }
