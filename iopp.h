@@ -1,4 +1,6 @@
 // #pragma once
+// #define IOPP_ENABLE_OPENCL_LOG
+
 #include "CL/cl.h"
 #include "la.h"
 #include <map>
@@ -162,7 +164,11 @@ public:
 
 _opencl_context opencl_context();
 
-void sqrt(cl_vec& v);
-void exp(cl_vec& v);
+cl_vec sqrt(const cl_vec& v);
+cl_vec exp(const cl_vec& v);
+cl_vec relu(const cl_vec& v);
+cl_vec relu_d(const cl_vec& v);
+cl_vec tanh(const cl_vec& v);
+cl_vec tanh_d(const cl_vec& v);
 
 } // end namespace iopp

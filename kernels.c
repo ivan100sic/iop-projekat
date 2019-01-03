@@ -80,7 +80,7 @@ kernel void vdivc(
 	int n
 ) {
 	LOOP
-		a[j] *= b[j];
+		a[j] /= b[j];
 }
 
 // u + x
@@ -204,11 +204,13 @@ kernel void mmdot(
 	int i = get_global_id(0);
 	int j = get_global_id(1);
 	int k;
-	float z = 0.0f;
-	for (k=0; k<m; k++) {
-		z += a[i + k*n] * b[k + j*m];
+	if (i < n && j < m) {
+		float z = 0.0f;
+		for (k=0; k<m; k++) {
+			z += a[i + k*n] * b[k + j*m];
+		}
+		c[i + j*n] = z;
 	}
-	c[i + j*n] = z;
 }
 
 kernel void vvouter(
@@ -220,7 +222,9 @@ kernel void vvouter(
 ) {
 	int i = get_global_id(0);
 	int j = get_global_id(1);
-	c[i + n*j] = a[i] * b[j];
+	if (i < n && j < m) {
+		c[i + n*j] = a[i] * b[j];
+	}
 }
 
 kernel void rdsum_1(
@@ -265,4 +269,43 @@ kernel void vexpc(
 ) {
 	LOOP
 		a[j] = exp(a[j]);
+}
+
+kernel void vreluc(
+	global float* a,
+	int n
+) {
+	LOOP
+		if (a[j] < 0.0f)
+			a[j] = 0.0f;
+}
+
+kernel void vrelu_dc(
+	global float* a,
+	int n
+) {
+	LOOP
+		if (a[j] < 0.0f)
+			a[j] = 0.0f;
+		else
+			a[j] = 1.0f;
+}
+
+kernel void vtanhc(
+	global float* a,
+	int n
+) {
+	LOOP
+		a[j] = tanh(a[j]);
+}
+
+kernel void vtanh_dc(
+	global float* a,
+	int n
+) {
+	LOOP
+		{
+			float t = 1.0 / cosh(a[j]);
+			a[j] = t * t;
+		}
 }

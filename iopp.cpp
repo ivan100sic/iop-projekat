@@ -41,15 +41,18 @@ void cl_mat::destroy() {
 
 cl_mat::cl_mat(const cl_mat& b) : context(b.context),
 	mem(b.context->new_buffer(b.n*b.m*sizeof(float))), n(b.n), m(b.m)
-{}
+{
+	context->mem_copy(b.mem, mem, n*m*sizeof(float));
+}
 
 cl_mat::cl_mat(cl_mat&& b) : context(b.context), mem(b.mem), n(b.n), m(b.m) {
-	b.destroy();
+	b.mem = NULL;
 }
 
 cl_mat& cl_mat::operator= (const cl_mat& b) {
 	if (this != &b) {
 		check(b);
+		destroy();
 		context->mem_copy(b.mem, mem, n*m*sizeof(float));
 	}
 	return *this;
@@ -58,8 +61,9 @@ cl_mat& cl_mat::operator= (const cl_mat& b) {
 cl_mat& cl_mat::operator= (cl_mat&& b) {
 	if (this != &b) {
 		check(b);
+		destroy();
 		mem = b.mem;
-		b.destroy();
+		b.mem = NULL;
 	}
 	return *this;
 }
@@ -243,15 +247,19 @@ void cl_vec::destroy() {
 }
 
 cl_vec::cl_vec(const cl_vec& b) : context(b.context),
-	mem(b.context->new_buffer(b.n*sizeof(float))), n(b.n) {}
+	mem(b.context->new_buffer(b.n*sizeof(float))), n(b.n)
+{
+	context->mem_copy(b.mem, mem, n*sizeof(float));
+}
 
 cl_vec::cl_vec(cl_vec&& b) : context(b.context), mem(b.mem), n(b.n) {
-	b.destroy();
+	b.mem = NULL;
 }
 
 cl_vec& cl_vec::operator= (const cl_vec& b) {
 	if (this != &b) {
 		check(b);
+		destroy();
 		context->mem_copy(b.mem, mem, n*sizeof(float));
 	}
 	return *this;
@@ -260,8 +268,9 @@ cl_vec& cl_vec::operator= (const cl_vec& b) {
 cl_vec& cl_vec::operator= (cl_vec&& b) {
 	if (this != &b) {
 		check(b);
+		destroy();
 		mem = b.mem;
-		b.destroy();
+		b.mem = NULL;
 	}
 	return *this;
 }
@@ -469,7 +478,9 @@ cl_kernel _opencl_context::get_kernel(std::string name) {
 	if (!kernel_cache.count(name)) {
 		int err;
 		kernel_cache[name] = clCreateKernel(program, name.c_str(), &err);
-		std::cerr << "kernel error " << name << ' ' << err << '\n';
+		#ifdef IOPP_ENABLE_OPENCL_LOG
+			std::cerr << "kernel error " << name << ' ' << err << '\n';
+		#endif
 	}
 	return kernel_cache[name];
 }
@@ -484,7 +495,9 @@ _opencl_context::_opencl_context() {
 
 cl_mem _opencl_context::new_buffer(int len) {
 	if (available_buffers[len].empty()) {
-		std::cerr << "allocating new buffer " << len << '\n';
+		#ifdef IOPP_ENABLE_OPENCL_LOG
+			std::cerr << "allocating new buffer " << len << '\n';
+		#endif
 		return clCreateBuffer(context, CL_MEM_READ_WRITE,
 			len, NULL, NULL);
 	} else {
@@ -525,8 +538,6 @@ void _opencl_context::run_kernel_impl(std::string name, std::vector<int> dims, i
 	} else {
 		throw "invalid number of dimensions";
 	}
-
-	// std::cerr << "lansiram sa parametrima: " << dc << ' ' << gws[0] << ' ' << lws[0] << '\n';
 
 	clEnqueueNDRangeKernel(queue, get_kernel(name),
 		dc, NULL, gws, lws,
@@ -593,12 +604,40 @@ void _opencl_context::mem_write(const void* src, cl_mem dest, int n) {
 
 
 
-void sqrt(cl_vec& a) {
-	a.run_function("vsqrtc");
+cl_vec sqrt(const cl_vec& a) {
+	auto b = a;
+	b.run_function("vsqrtc");
+	return b;
 }
 
-void exp(cl_vec& a) {
-	a.run_function("vexpc");
+cl_vec exp(const cl_vec& a) {
+	auto b = a;
+	b.run_function("vexpc");
+	return b;
+}
+
+cl_vec relu(const cl_vec& a) {
+	auto b = a;
+	b.run_function("vreluc");
+	return b;
+}
+
+cl_vec relu_d(const cl_vec& a) {
+	auto b = a;
+	b.run_function("vrelu_dc");
+	return b;
+}
+
+cl_vec tanh(const cl_vec& a) {
+	auto b = a;
+	b.run_function("vtanhc");
+	return b;
+}
+
+cl_vec tanh_d(const cl_vec& a) {
+	auto b = a;
+	b.run_function("vtanh_dc");
+	return b;
 }
 
 
