@@ -52,7 +52,12 @@ vector<pair<vec, vec>> preprocess(vector<pair<int, vector<int>>> data) {
 
 struct mnist_model {
 	cl_mat A, B;
-	cl_vec c, d, x, t;
+	cl_vec c, d;
+
+	cl_mat vA, vB;
+	cl_vec vc, vd;
+
+	cl_vec x, t;
 	cl_vec k, l, m, n, o, p;
 	cl_val q;
 
@@ -134,6 +139,11 @@ struct mnist_model {
 		c(ct.vec(800)),
 		d(ct.vec(10)),
 
+		vA(ct.mat(800, 784)),
+		vB(ct.mat(10, 800)),
+		vc(ct.vec(800)),
+		vd(ct.vec(10)),
+
 		x(ct.vec(784)),
 		t(ct.vec(10)),
 
@@ -150,6 +160,11 @@ struct mnist_model {
 		B.set(random_mat(10, 800, -0.01, 0.01));
 		c.set(random_vec(800, -0.01, 0.01));
 		d.set(random_vec(10, -0.01, 0.01));
+
+		vA.set(random_mat(800, 784, 0, 0));
+		vB.set(random_mat(10, 800, 0, 0));
+		vc.set(random_vec(800, 0, 0));
+		vd.set(random_vec(10, 0, 0));
 	}
 
 	void check_matrix(cl_mat& a) {
@@ -203,21 +218,32 @@ struct mnist_model {
 	}
 
 	// maksimizujemo q pa je zato + gradijent
-	void back_propagate(float rate, float reg) {
+	void back_propagate(float rate, float reg, float momentum_gamma) {
 		auto g1 = ct.vec(10);
 		auto g2 = ct.vec(800);
 		auto g3 = ct.vec(784);
 		auto e = ct.val(rate);
 		auto rg = ct.val(1.0f - reg);
+		auto mg = ct.val(momentum_gamma);
 
-		g1 = t;
-		g1 = softmax_jacobian_dot(o, t);
-		d += g1 * e;
+		g1 = t / (p + ct.val(1e-4)); // extract this as a parameter maybe?
+		g1 = softmax_jacobian_dot(o, g1);
+
+		vd = vd * mg + g1 * e;
+		d += vd;
+
 		g2 = B.T().dot(g1);
-		B += g1.outer(m) * e;
+
+		vB = vB * mg + g1.outer(m) * e;
+		B += vB;
+
 		g2 *= tanh_d(l);
-		c += g2 * e;
-		A += g2.outer(x) * e;
+
+		vc = vc * mg + g2 * e;
+		c +=  vc;
+
+		vA = vA * mg + g2.outer(x) * e;
+		A += vA;
 
 		A *= rg;
 		B *= rg;
@@ -266,9 +292,9 @@ void train() {
 	int acc_acc = 0;
 	float gain_acc = 0;
 
-	for (int i=0; i<1200000; i++) {
+	for (int i=0; i<600000; i++) {
 		model.feed_forward(r[i % r.size()]);
-		model.back_propagate(1e-2, 1e-4);
+		model.back_propagate(3e-3, 3e-5, 0.9);
 		float t = model.q.get();
 		gain_acc += t;
 		if (t > 0.5f) {
@@ -284,18 +310,63 @@ void train() {
 		}
 	}
 
-	model.save("model_main");
+	model.save("model_momentum_log");
+}
+
+void train_degenerate() {
+	srand(3211);
+	cerr << setw(9) << fixed;
+	using namespace mnist;
+	auto r = preprocess(read_data("mnist_train.csv"));
+	cerr << "testcases: " << r.size() << '\n';
+	random_shuffle(r.begin(), r.end());
+
+	mnist_model model;
+	// model.load("model_main");
+
+	// {
+	// 	cl_vec t = ct.vec(3);
+	// 	cl_vec w = ct.vec(3);
+	// 	t.set({-1, 0, 2});
+	// 	w.set({1, 10, 100});
+	// 	cerr << model.softmax_jacobian_dot(t, w).get() << '\n';
+	// }
+
+	int acc_acc = 0;
+	float gain_acc = 0;
+
+	for (int i=0; i<300000; i++) {
+		model.feed_forward(r[i % 1000]);
+		model.back_propagate(1e-2, 1e-4, 0.9);
+		float t = model.q.get();
+		gain_acc += t;
+		if (t > 0.5f) {
+			acc_acc++;
+		}
+		if (i % 501 == 0) {
+			cerr << "epoch: " << i << '\n';
+			cerr << "acc_acc: " << acc_acc << '\n';
+			cerr << "gain_acc: " << gain_acc / 501 << '\n';
+			acc_acc = 0;
+			gain_acc = 0;
+			model.print_diag();
+		}
+	}
+
+	model.save("model_alt");
 }
 
 void test() {
 	using namespace mnist;
 
 	mnist_model model;
-	model.load("model_main");
+	model.load("model_momentum_log");
 
 	int acc_acc = 0;
 
 	auto r = preprocess(read_data("mnist_test.csv"));
+
+	vector<vector<int>> confusion(10, vector<int>(10, 0));
 
 	for (int i=0; i<(int)r.size(); i++) {
 		model.feed_forward(r[i]);
@@ -308,14 +379,24 @@ void test() {
 			acc_acc++;
 		}
 
+		confusion[y][t]++;
+
 		if (i % 501 == 0) {
 			cerr << "accuracy: " << acc_acc << "/" << i+1 << '\n';
 		}
 	}
 
 	cerr << "accuracy: " << acc_acc << "/" << r.size() << '\n';
+
+	for (int i=0; i<10; i++) {
+		for (int j=0; j<10; j++)
+			cerr << setw(5) << confusion[i][j] << ' ';
+		cerr << '\n';
+	}
+
 }
 
 int main() {
+	train();
 	test();
 }
