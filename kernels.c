@@ -305,7 +305,7 @@ kernel void vtanh_dc(
 ) {
 	LOOP
 		{
-			float t = 1.0 / cosh(a[j]);
+			float t = 1.0f / cosh(a[j]);
 			a[j] = t * t;
 		}
 }

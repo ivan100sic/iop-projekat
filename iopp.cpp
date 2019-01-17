@@ -434,6 +434,7 @@ cl_platform_id _opencl_context::get_platform() {
 cl_device_id _opencl_context::get_device(cl_platform_id platform) {
 	cl_device_id a[1];
 	clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 1, a, NULL);
+
 	return a[0];
 }
 
